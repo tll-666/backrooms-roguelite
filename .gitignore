@@ -1,0 +1,31 @@
+# Godot editor/runtime cache
+.godot/
+.import/
+export.cfg
+export_credentials.cfg
+
+# Local tooling caches
+.codegraph/
+.omo/
+.agents/handoff/
+
+# Generated shader/import cache fragments
+*.ctex
+*.md5
+*.cache
+
+# Exported builds
+builds/
+exports/
+*.pck
+*.exe
+*.app
+*.zip
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Keep Godot resource import metadata tracked when paired with committed assets.
+!*.import
