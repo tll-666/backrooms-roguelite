@@ -3,142 +3,155 @@ class_name LevelGenerator
 
 @export var room_templates: Array[PackedScene] = []
 @export var portal_template: PackedScene
-@export var rooms_per_floor: int = 12
 @export var room_size: Vector2 = Vector2(800, 600)
+@export var generation_radius: int = 2
+@export var cleanup_radius: int = 4
+@export var portal_interval_min: int = 10
+@export var portal_interval_max: int = 15
 
-var generated_rooms: Array[Room] = []
-var room_positions: Array[Vector2] = []
-var spawn_room: Room = null
-var portal_room: Room = null
+const DIRS: Array[Vector2i] = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+
+var room_map: Dictionary = {}
+var rooms_since_portal: int = 0
+var portal_target: int = 0
+var player_grid: Vector2i = Vector2i.ZERO
 
 func _ready() -> void:
 	generate_floor()
 
+func _process(_delta: float) -> void:
+	if GameManager.current_state != GameManager.GameState.PLAYING:
+		return
+	var player_node = get_tree().get_first_node_in_group("player")
+	if not player_node:
+		return
+	var grid = _world_to_grid(player_node.global_position)
+	if grid != player_grid:
+		player_grid = grid
+		_ensure_area_around(player_grid)
+		_cleanup_distant(player_grid)
+
 func generate_floor() -> void:
 	_clear_floor()
-	_generate_room_layout()
-	_place_rooms()
-	_connect_rooms()
-	_place_doors()
-	_place_portal()
+	rooms_since_portal = 0
+	portal_target = randi_range(portal_interval_min, portal_interval_max)
+	player_grid = Vector2i.ZERO
+	_ensure_area_around(player_grid)
 	_place_player()
 	_place_enemies_and_items()
 
 func _clear_floor() -> void:
-	for room in generated_rooms:
+	for room in room_map.values():
 		if is_instance_valid(room):
 			room.queue_free()
-	generated_rooms.clear()
-	room_positions.clear()
-	spawn_room = null
-	portal_room = null
+	room_map.clear()
 
-func _generate_room_layout() -> void:
-	var grid: Dictionary = {}
-	var start = Vector2i.ZERO
-	grid[start] = true
-	room_positions.append(Vector2(start) * room_size)
+func _world_to_grid(pos: Vector2) -> Vector2i:
+	return Vector2i(roundi(pos.x / room_size.x), roundi(pos.y / room_size.y))
 
-	var frontier: Array[Vector2i] = [start]
-	var directions = [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]
+func _grid_to_world(grid: Vector2i) -> Vector2:
+	return Vector2(grid) * room_size
 
-	for i in range(rooms_per_floor - 1):
-		if frontier.is_empty():
-			break
+func _ensure_area_around(center: Vector2i) -> void:
+	for dx in range(-generation_radius, generation_radius + 1):
+		for dy in range(-generation_radius, generation_radius + 1):
+			var gp = center + Vector2i(dx, dy)
+			if not room_map.has(gp):
+				_generate_room_at(gp)
 
-		var idx = randi() % frontier.size()
-		var current = frontier[idx]
+func _generate_room_at(grid_pos: Vector2i) -> Room:
+	var template = room_templates[randi() % room_templates.size()]
+	var room = template.instantiate()
+	room.global_position = _grid_to_world(grid_pos)
+	add_child(room)
+	room_map[grid_pos] = room
 
-		var valid_dirs: Array[Vector2i] = []
-		for dir in directions:
-			var neighbor = current + dir
-			if not grid.has(neighbor):
-				valid_dirs.append(dir)
+	for dir in DIRS:
+		var neighbor_grid = grid_pos + dir
+		if room_map.has(neighbor_grid):
+			var neighbor = room_map[neighbor_grid] as Room
+			if not (neighbor in room.connections):
+				room.add_connection(neighbor)
+				neighbor.add_connection(room)
+			var room_dir = _vector2i_to_door_dir(dir)
+			var opp_dir = _vector2i_to_door_dir(-dir)
+			if not room.has_door(room_dir):
+				room.add_door(room_dir)
+			if not neighbor.has_door(opp_dir):
+				neighbor.add_door(opp_dir)
 
-		if valid_dirs.is_empty():
-			frontier.remove_at(idx)
-			continue
+	rooms_since_portal += 1
+	if rooms_since_portal >= portal_target and portal_template:
+		_place_portal_in(room)
+		rooms_since_portal = 0
+		portal_target = randi_range(portal_interval_min, portal_interval_max)
 
-		var chosen_dir = valid_dirs[randi() % valid_dirs.size()]
-		var new_pos = current + chosen_dir
-		grid[new_pos] = true
-		room_positions.append(Vector2(new_pos) * room_size)
-		frontier.append(new_pos)
+	return room
 
-		if frontier.size() > 1 and randf() < 0.3:
-			frontier.remove_at(idx)
-
-func _place_rooms() -> void:
-	for i in room_positions.size():
-		var template = room_templates[randi() % room_templates.size()]
-		var room = template.instantiate()
-		add_child(room)
-		room.global_position = room_positions[i]
-		room.room_id = i
-		generated_rooms.append(room)
-
-	spawn_room = generated_rooms[0]
-
-func _connect_rooms() -> void:
-	for i in generated_rooms.size():
-		for j in range(i + 1, generated_rooms.size()):
-			var a = generated_rooms[i]
-			var b = generated_rooms[j]
-			var dist = a.global_position.distance_to(b.global_position)
-
-			if dist < room_size.x * 1.5:
-				a.add_connection(b)
-				b.add_connection(a)
-
-func _get_direction(from: Room, to: Room) -> int:
-	var diff = to.global_position - from.global_position
-	if abs(diff.x) > abs(diff.y):
-		return 3 if diff.x > 0 else 2
-	else:
-		return 1 if diff.y > 0 else 0
-
-func _place_doors() -> void:
-	var placed_pairs: Dictionary = {}
-
-	for i in generated_rooms.size():
-		for j in range(i + 1, generated_rooms.size()):
-			var a = generated_rooms[i]
-			var b = generated_rooms[j]
-			if not (b in a.connections):
-				continue
-
-			var pair_key = "%d_%d" % [mini(i, j), maxi(i, j)]
-			if placed_pairs.has(pair_key):
-				continue
-			placed_pairs[pair_key] = true
-
-			a.add_door(_get_direction(a, b))
-			b.add_door(_get_direction(b, a))
-
-func _place_portal() -> void:
-	if not portal_template or generated_rooms.size() < 2:
-		return
-
-	var candidates = generated_rooms.duplicate()
-	candidates.erase(spawn_room)
-	if candidates.is_empty():
-		return
-
-	portal_room = candidates[randi() % candidates.size()]
+func _place_portal_in(room: Room) -> void:
+	for child in room.get_children():
+		if child is Area2D and child.name.begins_with("Portal"):
+			return
 	var portal = portal_template.instantiate()
 	portal.position = Vector2(0, 0)
-	portal_room.add_child(portal)
+	room.add_child(portal)
+
+func _cleanup_distant(center: Vector2i) -> void:
+	var to_remove: Array[Vector2i] = []
+	for gp in room_map.keys():
+		var dist = (gp - center).abs()
+		if dist.x > cleanup_radius or dist.y > cleanup_radius:
+			to_remove.append(gp)
+	for gp in to_remove:
+		var room = room_map[gp] as Room
+		if not is_instance_valid(room):
+			room_map.erase(gp)
+			continue
+		for other in room.connections:
+			if not is_instance_valid(other):
+				continue
+			other.connections.erase(room)
+			var dir = _get_dir_between(gp, _world_to_grid(other.global_position))
+			_disable_door(other, dir)
+		room.queue_free()
+		room_map.erase(gp)
+
+func _disable_door(room: Room, dir: int) -> void:
+	match dir:
+		0: room.has_door_top = false; room.door_top.visible = false
+		1: room.has_door_bottom = false; room.door_bottom.visible = false
+		2: room.has_door_left = false; room.door_left.visible = false
+		3: room.has_door_right = false; room.door_right.visible = false
+	room._build_wall_collisions()
+
+func _vector2i_to_door_dir(v: Vector2i) -> int:
+	if v == Vector2i.UP: return 0
+	if v == Vector2i.DOWN: return 1
+	if v == Vector2i.LEFT: return 2
+	return 3
+
+func _get_dir_between(from: Vector2i, to: Vector2i) -> int:
+	var diff = to - from
+	if diff == Vector2i.UP: return 0
+	if diff == Vector2i.DOWN: return 1
+	if diff == Vector2i.LEFT: return 2
+	return 3
 
 func _place_player() -> void:
 	var player_node = get_tree().get_first_node_in_group("player")
-	if player_node and spawn_room:
-		player_node.global_position = spawn_room.global_position + Vector2(0, -50)
+	if player_node and room_map.has(Vector2i.ZERO):
+		var spawn = room_map[Vector2i.ZERO] as Room
+		player_node.global_position = spawn.global_position + Vector2(0, -50)
 
 func _place_enemies_and_items() -> void:
+	var rooms_array: Array[Room] = []
+	for room in room_map.values():
+		rooms_array.append(room)
+
 	var enemy_spawner = get_node_or_null("EnemySpawner")
 	if enemy_spawner:
-		enemy_spawner.spawn_enemies(generated_rooms)
+		enemy_spawner.spawn_enemies(rooms_array)
 
 	var item_spawner = get_node_or_null("ItemSpawner")
 	if item_spawner:
-		item_spawner.spawn_items(generated_rooms)
+		item_spawner.spawn_items(rooms_array)

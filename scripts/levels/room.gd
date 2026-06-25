@@ -51,6 +51,14 @@ func add_door(dir: int) -> void:
 			door_right.visible = true
 	_build_wall_collisions()
 
+func has_door(dir: int) -> bool:
+	match dir:
+		0: return has_door_top
+		1: return has_door_bottom
+		2: return has_door_left
+		3: return has_door_right
+	return false
+
 func _clear_collisions() -> void:
 	for child in static_body.get_children():
 		child.queue_free()
