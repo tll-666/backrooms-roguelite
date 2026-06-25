@@ -239,14 +239,15 @@ offset_top = 20.0
 offset_right = -20.0
 offset_bottom = 180.0
 
-[node name="Hotbar" type="HBoxContainer" parent="HUD"]
-anchors_preset = 10
-anchor_left = 0.5
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -140.0
-offset_top = -60.0
-offset_right = 140.0
-offset_bottom = -10.0
-theme_override_constants/separation = 8
+[node name="Hotbar" type="VBoxContainer" parent="HUD"]
+anchors_preset = 3
+anchor_left = 0.0
+anchor_top = 0.5
+anchor_right = 0.0
+anchor_bottom = 0.5
+offset_left = 12.0
+offset_top = -120.0
+offset_right = 72.0
+offset_bottom = 120.0
+theme_override_constants/separation = 6
 script = ExtResource("12_hotbar")
