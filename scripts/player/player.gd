@@ -29,6 +29,10 @@ var dash_timer: float = 0.0
 var dash_cooldown_timer: float = 0.0
 var is_dead: bool = false
 
+# 开发者控制台状态（由 /god、/noclip 命令切换）。
+var is_invincible: bool = false
+var is_noclip: bool = false
+
 const SPRITE_SIZE = 48
 const SCALE = 2
 const FRAME_IDLE = 0
@@ -333,7 +337,7 @@ func add_weapon(weapon: Weapon) -> void:
 		equip_weapon(weapon)
 
 func take_damage(amount: float) -> void:
-	if is_dead or is_dashing:
+	if is_dead or is_dashing or is_invincible:
 		return
 	health -= amount
 	health_changed.emit(health, max_health)

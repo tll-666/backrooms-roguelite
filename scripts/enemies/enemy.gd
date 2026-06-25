@@ -30,6 +30,7 @@ var is_dead: bool = false
 
 func _ready() -> void:
 	health = max_health
+	add_to_group("enemy")
 	_generate_sprite()
 	if detection_area:
 		detection_area.body_entered.connect(_on_player_detected)
