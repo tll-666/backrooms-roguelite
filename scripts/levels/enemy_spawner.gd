@@ -3,8 +3,11 @@ extends Node
 @export var enemy_scenes: Array[PackedScene] = []
 @export var enemies_per_floor_min: int = 2
 @export var enemies_per_floor_max: int = 3
+@export var patrol_point_count: int = 4
 
 func spawn_enemies(rooms: Array[Room]) -> void:
+	_clear_enemies()
+
 	if RunManager.current_floor != 1:
 		return
 
@@ -27,10 +30,21 @@ func spawn_enemies(rooms: Array[Room]) -> void:
 		if spawn_points.size() > 0:
 			enemy.global_position = spawn_points[randi() % spawn_points.size()].global_position
 		else:
-			enemy.global_position = room.global_position + Vector2(randf_range(-200, 200), randf_range(-100, 100))
+			enemy.global_position = room.global_position
+
+		var patrol_pts: Array[Vector2] = []
+		for k in patrol_point_count:
+			var offset = Vector2(randf_range(-280, 280), randf_range(-180, 180))
+			patrol_pts.append(room.global_position + offset)
+		enemy.patrol_points = patrol_pts
 
 		enemy.died.connect(room.check_cleared)
 		enemy.z_index = 5
 		add_child(enemy)
 		room.enemies.append(enemy)
 		spawned += 1
+
+func _clear_enemies() -> void:
+	for child in get_children():
+		if child is Enemy:
+			child.queue_free()
