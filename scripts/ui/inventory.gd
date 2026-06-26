@@ -547,6 +547,8 @@ func _build_tooltip() -> void:
 func _on_slot_mouse_entered(slot: Button) -> void:
 	_mouse_over_slot = true
 	_tooltip_slot = slot
+	if not slot.has_meta("item_kind") or not slot.has_meta("item"):
+		return
 	var kind: String = slot.get_meta("item_kind", "")
 	var item = slot.get_meta("item", null)
 
@@ -560,16 +562,18 @@ func _on_slot_mouse_entered(slot: Button) -> void:
 	tooltip_label.text = tt
 	tooltip_panel.visible = true
 
+	# 固定尺寸避免布局塌陷（RichTextLabel.fit_content 需等下一帧才能拿到尺寸）
+	tooltip_panel.custom_minimum_size = Vector2(160, 40)
+	tooltip_panel.size = Vector2(160, 40)
+
 	var mp := get_global_mouse_position()
 	var vp_size := get_viewport().get_visible_rect().size
-	# Force layout update for size calculation
-	tooltip_panel.size = Vector2.ZERO  # reset to trigger recalc
-	var panel_size := tooltip_panel.get_minimum_size()
 	var pos := mp + Vector2(16, 16)
-	if pos.x + panel_size.x > vp_size.x:
-		pos.x = mp.x - panel_size.x - 8
-	if pos.y + panel_size.y > vp_size.y:
-		pos.y = mp.y - panel_size.y - 8
+	if pos.x + 160 > vp_size.x:
+		pos.x = mp.x - 160 - 8
+	if pos.y + 40 > vp_size.y:
+		pos.y = mp.y - 40 - 8
+	tooltip_panel.global_position = pos
 	tooltip_panel.global_position = pos
 
 
@@ -742,6 +746,8 @@ func _on_overlay_gui_input(event: InputEvent) -> void:
 
 
 func _show_detail(slot: Button) -> void:
+	if not slot.has_meta("item_kind") or not slot.has_meta("item"):
+		return
 	var kind: String = slot.get_meta("item_kind", "")
 	var item = slot.get_meta("item", null)
 	if kind == "" or item == null:
@@ -832,6 +838,8 @@ func _close_detail() -> void:
 # ============================================================
 
 func _on_slot_pressed(slot: Button) -> void:
+	if not slot.has_meta("item_kind") or not slot.has_meta("item"):
+		return
 	var kind: String = slot.get_meta("item_kind", "")
 	var item = slot.get_meta("item", null)
 
