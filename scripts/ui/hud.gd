@@ -31,7 +31,12 @@ func _on_stamina_changed(current: float, max_st: float) -> void:
 	stamina_bar.value = current
 
 func _on_ammo_changed(current: int, max_ammo: int) -> void:
-	ammo_label.text = "%d / %d" % [current, max_ammo]
+	var player = get_tree().get_first_node_in_group("player")
+	if player and player.current_weapon and player.has_method("get_ammo_reserve"):
+		var reserve = player.get_ammo_reserve(player.current_weapon.ammo_type)
+		ammo_label.text = "%d / %d  备%d" % [current, max_ammo, reserve]
+	else:
+		ammo_label.text = "%d / %d" % [current, max_ammo]
 
 func _on_floor_changed(floor: int) -> void:
 	floor_label.text = "楼层 %d" % floor

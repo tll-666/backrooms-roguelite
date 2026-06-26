@@ -56,6 +56,16 @@ func _refresh() -> void:
 		slot_buttons[idx].text = txt
 		idx += 1
 
+	# 显示弹药储备
+	if idx < slot_buttons.size() and player.has_method("get_ammo_reserve"):
+		var reserves: Dictionary = player.ammo_reserves
+		if not reserves.is_empty():
+			var ammo_lines: Array[String] = []
+			for ammo_type in reserves:
+				ammo_lines.append("%s: %d" % [ammo_type, reserves[ammo_type]])
+			slot_buttons[idx].text = "弹药\n" + "\n".join(ammo_lines)
+			idx += 1
+
 	for i in range(idx, slot_buttons.size()):
 		slot_buttons[i].text = ""
 
