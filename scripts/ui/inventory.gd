@@ -810,7 +810,7 @@ func _set_detail_content(kind: String, item: Variant, _slot: Button) -> void:
 			detail_info_label.text = "\n".join(info_lines)
 
 			var player = get_tree().get_first_node_in_group("player")
-			var is_equipped := player != null and player.current_weapon == w
+			var is_equipped: bool = player != null and player.current_weapon == w
 			detail_equip_btn.visible = not is_equipped
 			detail_unequip_btn.visible = is_equipped
 			detail_hotbar_btn.visible = true
