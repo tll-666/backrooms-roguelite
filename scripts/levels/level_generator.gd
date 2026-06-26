@@ -14,15 +14,24 @@ const SIZES: Array[Vector2] = [
 	Vector2(500, 400), Vector2(650, 500), Vector2(800, 600), Vector2(950, 700)
 ]
 const GRID_SIZE: Vector2 = Vector2(1000, 750)
+const CORRIDOR_WIDTH: float = 100.0
+const CORRIDOR_WALL_THICKNESS: float = 12.0
 const COLORS: Array[Color] = [
 	Color(0.12, 0.10, 0.07),
 	Color(0.10, 0.12, 0.10),
 	Color(0.14, 0.11, 0.08),
 	Color(0.09, 0.10, 0.12),
 ]
+const ROOM_ARCHETYPES: Array[StringName] = [
+	&"claustrophobic",
+	&"pillar_hall",
+	&"ring_room",
+	&"service_maze",
+	&"storage_bays",
+]
 
 var room_map: Dictionary = {}
-var corridors: Array[Sprite2D] = []
+var corridors: Array[Node2D] = []
 var corridor_map: Dictionary = {}
 var rooms_since_portal: int = 0
 var portal_target: int = 0
@@ -97,22 +106,21 @@ func _generate_room_at(grid_pos: Vector2i) -> Room:
 	var size = SIZES[randi() % SIZES.size()]
 	var floor_col = COLORS[randi() % COLORS.size()]
 	var wall_col = floor_col * 1.8
+	var archetype = _pick_room_archetype(grid_pos, size)
 
 	var room = room_template.instantiate() as Room
 	room.global_position = _grid_to_world(grid_pos)
 	add_child(room)
-	room.configure(size.x, size.y, floor_col, wall_col)
+	room.configure(size.x, size.y, floor_col, wall_col, archetype)
 	room_map[grid_pos] = room
-
-	if size.x >= 800 and size.y >= 600:
-		room.spawn_obstacles()
 
 	var neighbors: Array[Vector2i] = []
 	for dir in DIRS:
-		if room_map.has(grid_pos + dir):
+		var neighbor_pos = grid_pos + dir
+		if room_map.has(neighbor_pos) and (room_map[neighbor_pos] as Room).connections.size() < 3:
 			neighbors.append(dir)
 
-	var connect_count = mini(neighbors.size(), randi_range(1, 3))
+	var connect_count = _pick_connection_count(grid_pos, neighbors.size())
 	neighbors.shuffle()
 	for k in connect_count:
 		var dir = neighbors[k]
@@ -143,13 +151,32 @@ func _generate_room_at(grid_pos: Vector2i) -> Room:
 	return room
 
 
+func _pick_room_archetype(grid_pos: Vector2i, size: Vector2) -> StringName:
+	if grid_pos == Vector2i.ZERO:
+		return &"pillar_hall"
+	if size.x < 650 or size.y < 500:
+		return &"claustrophobic"
+	return ROOM_ARCHETYPES[randi() % ROOM_ARCHETYPES.size()]
+
+
+func _pick_connection_count(grid_pos: Vector2i, neighbor_count: int) -> int:
+	if neighbor_count == 0:
+		return 0
+	if grid_pos == Vector2i.ZERO:
+		return mini(neighbor_count, 2)
+
+	var roll = randf()
+	if roll < 0.64:
+		return 1
+	if roll < 0.90:
+		return mini(neighbor_count, 2)
+	return mini(neighbor_count, 3)
+
+
 func _add_corridor(a_grid: Vector2i, b_grid: Vector2i, a: Room, b: Room, dir: int) -> void:
 	var key = _corridor_key(a_grid, b_grid)
 	if corridor_map.has(key):
 		return
-
-	var sprite = Sprite2D.new()
-	sprite.centered = true
 
 	var a_edge: Vector2
 	var b_edge: Vector2
@@ -167,20 +194,52 @@ func _add_corridor(a_grid: Vector2i, b_grid: Vector2i, a: Room, b: Room, dir: in
 			a_edge = a.global_position + Vector2(a.room_half_w, 0)
 			b_edge = b.global_position + Vector2(-b.room_half_w, 0)
 
-	sprite.position = (a_edge + b_edge) / 2.0
+	var corridor = Node2D.new()
+	corridor.name = "Corridor_%s" % key.replace(":", "_").replace(",", "_")
+	corridor.position = (a_edge + b_edge) / 2.0
 	var dist = a_edge.distance_to(b_edge)
-	var img: Image
+	var floor_rect = ColorRect.new()
+	floor_rect.color = Color(0.18, 0.16, 0.12, 1)
 	if dir == 0 or dir == 1:
-		var ch = maxi(20, int(dist))
-		img = Image.create(12, ch, false, Image.FORMAT_RGBA8)
+		_configure_corridor_rect(floor_rect, Vector2(CORRIDOR_WIDTH, dist))
+		_add_corridor_wall_pair(corridor, true, dist)
 	else:
-		var cw = maxi(20, int(dist))
-		img = Image.create(cw, 12, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.18, 0.16, 0.12, 1))
-	sprite.texture = ImageTexture.create_from_image(img)
-	add_child(sprite)
-	corridors.append(sprite)
-	corridor_map[key] = sprite
+		_configure_corridor_rect(floor_rect, Vector2(dist, CORRIDOR_WIDTH))
+		_add_corridor_wall_pair(corridor, false, dist)
+	corridor.add_child(floor_rect)
+	add_child(corridor)
+	corridors.append(corridor)
+	corridor_map[key] = corridor
+
+
+func _configure_corridor_rect(rect: ColorRect, size: Vector2) -> void:
+	rect.offset_left = -size.x / 2.0
+	rect.offset_top = -size.y / 2.0
+	rect.offset_right = size.x / 2.0
+	rect.offset_bottom = size.y / 2.0
+
+
+func _add_corridor_wall_pair(corridor: Node2D, vertical: bool, length: float) -> void:
+	var body = StaticBody2D.new()
+	body.collision_layer = 1
+	corridor.add_child(body)
+	if vertical:
+		var x = CORRIDOR_WIDTH / 2.0 + CORRIDOR_WALL_THICKNESS / 2.0
+		_add_corridor_collision(body, Vector2(-x, 0), Vector2(CORRIDOR_WALL_THICKNESS, length))
+		_add_corridor_collision(body, Vector2(x, 0), Vector2(CORRIDOR_WALL_THICKNESS, length))
+	else:
+		var y = CORRIDOR_WIDTH / 2.0 + CORRIDOR_WALL_THICKNESS / 2.0
+		_add_corridor_collision(body, Vector2(0, -y), Vector2(length, CORRIDOR_WALL_THICKNESS))
+		_add_corridor_collision(body, Vector2(0, y), Vector2(length, CORRIDOR_WALL_THICKNESS))
+
+
+func _add_corridor_collision(body: StaticBody2D, pos: Vector2, size: Vector2) -> void:
+	var shape = RectangleShape2D.new()
+	shape.size = size
+	var collision = CollisionShape2D.new()
+	collision.shape = shape
+	collision.position = pos
+	body.add_child(collision)
 
 
 func _corridor_key(a: Vector2i, b: Vector2i) -> String:
@@ -196,7 +255,7 @@ func _remove_corridor(a: Vector2i, b: Vector2i) -> void:
 	var key = _corridor_key(a, b)
 	if not corridor_map.has(key):
 		return
-	var corridor = corridor_map[key] as Sprite2D
+	var corridor = corridor_map[key] as Node2D
 	if is_instance_valid(corridor):
 		corridors.erase(corridor)
 		corridor.queue_free()
