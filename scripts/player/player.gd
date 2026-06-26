@@ -353,7 +353,11 @@ func _select_hotbar(idx: int) -> void:
 	hotbar_selected = idx
 	var item = hotbar[idx]
 	if item is String and item == "flashlight":
-		pass
+		# 切到手电筒 → 卸下当前武器
+		if current_weapon:
+			current_weapon.unequip()
+			current_weapon = null
+			weapon_changed.emit(null)
 	elif item is Weapon and item != current_weapon:
 		equip_weapon(item)
 	if flashlight_body:
