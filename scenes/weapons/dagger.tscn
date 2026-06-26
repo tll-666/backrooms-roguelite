@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://bqk8h2j3p4w5x"]
+[gd_scene format=3 uid="uid://bqk8h2j3p4w5x"]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon.gd" id="1_weapon_script"]
 
@@ -10,3 +10,7 @@ melee_range = 50.0
 melee_angle = 70.0
 melee_damage = 30.0
 fire_rate = 0.4
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+centered = true
+offset = Vector2(0, 0)

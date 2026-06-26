@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://dk9i3k4l5m6n7o"]
+[gd_scene format=3 uid="uid://6ouhhxuaca8i"]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon.gd" id="1_weapon_script"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/bullet.tscn" id="2_bullet_scene"]
@@ -19,3 +19,7 @@ ammo_type = "stun"
 bullet_scene = ExtResource("2_bullet_scene")
 status_effect = "stun"
 effect_duration = 2.0
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+centered = true
+offset = Vector2(0, 0)

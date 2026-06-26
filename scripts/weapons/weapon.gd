@@ -32,15 +32,21 @@ var is_reloading: bool = false
 var reload_timer: float = 0.0
 var owner_player: Player = null
 
+signal reload_started(effective_duration: float)
+signal reload_progress(progress: float)
+var reload_duration: float = 0.0
+
 func _ready() -> void:
 	# current_ammo 初始为 0，equip() 时从玩家储备自动装载
-	pass
+	_generate_sprite()
 
 
 func _process(delta: float) -> void:
 	fire_timer = max(0.0, fire_timer - delta)
 	if is_reloading:
 		reload_timer -= delta
+		var progress: float = clampf(1.0 - reload_timer / reload_duration, 0.0, 1.0)
+		reload_progress.emit(progress)
 		if reload_timer <= 0.0:
 			_finish_reload()
 
@@ -82,6 +88,9 @@ func _try_melee(origin: Vector2, direction: Vector2) -> bool:
 	if fire_timer > 0.0:
 		return false
 	fire_timer = fire_rate
+
+	if weapon_kind == WeaponKind.MELEE:
+		_spawn_melee_slash(origin, direction)
 
 	if not owner_player:
 		return false
@@ -149,11 +158,14 @@ func start_reload() -> void:
 		if owner_player.get_ammo_reserve(ammo_type) <= 0:
 			return  # 无储备弹药，无法装填
 	is_reloading = true
-	reload_timer = reload_time - MetaProgression.get_upgrade_value("reload_speed")
+	reload_duration = reload_time - MetaProgression.get_upgrade_value("reload_speed")
+	reload_timer = reload_duration
+	reload_started.emit(reload_duration)
 
 
 func _finish_reload() -> void:
 	is_reloading = false
+	reload_progress.emit(1.0)
 	_reload_from_reserve()
 	RunManager.ammo_changed.emit(current_ammo, max_ammo)
 
@@ -165,3 +177,142 @@ func _reload_from_reserve() -> void:
 		if to_load > 0:
 			owner_player.consume_ammo(ammo_type, to_load)
 			current_ammo = to_load
+
+
+func _generate_sprite() -> void:
+	var sprite_node := get_node_or_null("Sprite2D") as Sprite2D
+	if not sprite_node:
+		return
+	var img: Image
+	if weapon_name == "匕首":
+		img = _draw_dagger_pixel(16, 16)
+	elif weapon_name == "定身枪":
+		img = _draw_stun_gun_pixel(24, 12)
+	else:
+		img = _draw_pistol_pixel(24, 12)
+	var w := img.get_width()
+	var h := img.get_height()
+	var big := Image.create(w * 2, h * 2, false, Image.FORMAT_RGBA8)
+	big.fill(Color(0, 0, 0, 0))
+	for y in range(h):
+		for x in range(w):
+			var c := img.get_pixel(x, y)
+			if c.a > 0:
+				for dy in range(2):
+					for dx in range(2):
+						big.set_pixel(x * 2 + dx, y * 2 + dy, c)
+	var tex := ImageTexture.create_from_image(big)
+	sprite_node.texture = tex
+
+
+func _draw_pistol_pixel(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var metal := Color(0.35, 0.35, 0.40)
+	var dark := Color(0.20, 0.22, 0.24)
+	var highlight := Color(0.5, 0.5, 0.55)
+	# 枪管 x(8-22) y(4-6)
+	for x in range(8, 23):
+		for y in range(4, 7):
+			img.set_pixel(x, y, metal)
+	# 枪身 x(6-18) y(5-9)
+	for x in range(6, 19):
+		for y in range(5, 10):
+			img.set_pixel(x, y, metal)
+	# 握把 x(4-8) y(8-11)
+	for x in range(4, 9):
+		for y in range(8, 12):
+			img.set_pixel(x, y, dark)
+	# 准星
+	img.set_pixel(22, 3, highlight)
+	img.set_pixel(23, 3, highlight)
+	return img
+
+
+func _draw_dagger_pixel(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var blade := Color(0.85, 0.85, 0.90)
+	var handle := Color(0.20, 0.14, 0.10)
+	var edge := Color(0.95, 0.95, 0.98)
+	# 刀刃三角形：从 (8,4) 到 (12,10)，顶点 (8,4)，底边在 x=12
+	for y in range(4, 11):
+		var left_x: int = 8 + int(4.0 * (y - 4) / 6.0)
+		for x in range(left_x, 13):
+			if x == left_x or y == 4 or x == 12:
+				img.set_pixel(x, y, edge)
+			else:
+				img.set_pixel(x, y, blade)
+	# 护手 x(7-13) y(10)
+	for x in range(7, 14):
+		img.set_pixel(x, 10, handle)
+	# 握柄 x(9-11) y(11-14)
+	for x in range(9, 12):
+		for y in range(11, 15):
+			img.set_pixel(x, y, handle)
+	return img
+
+
+func _draw_stun_gun_pixel(w: int, h: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var metal := Color(0.35, 0.35, 0.40)
+	var dark := Color(0.20, 0.22, 0.24)
+	var cyan := Color(0.4, 0.8, 0.95)
+	var glow := Color(0.6, 0.9, 1.0)
+	# 枪管 x(8-22) y(4-6)
+	for x in range(8, 23):
+		for y in range(4, 7):
+			img.set_pixel(x, y, metal)
+	# 枪身 x(6-18) y(5-9)
+	for x in range(6, 19):
+		for y in range(5, 10):
+			img.set_pixel(x, y, metal)
+	# 握把 x(4-8) y(8-11)
+	for x in range(4, 9):
+		for y in range(8, 12):
+			img.set_pixel(x, y, dark)
+	# 线圈竖纹 x(11,14,17) y(2-6)
+	for coil_x in [11, 14, 17]:
+		for y in range(2, 7):
+			img.set_pixel(coil_x, y, cyan)
+	# 枪口发光 x(20-23) y(3-6)
+	for x in range(20, 24):
+		for y in range(3, 7):
+			img.set_pixel(x, y, glow)
+	return img
+
+
+func _spawn_melee_slash(origin: Vector2, direction: Vector2) -> void:
+	if not owner_player:
+		return
+	var s := 64
+	var img := Image.create(s, s, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var cx := 0
+	var cy := s / 2
+	var half_angle_rad := deg_to_rad(melee_angle / 2.0)
+	for y in range(s):
+		for x in range(s):
+			var dx := x - cx
+			var dy := y - cy
+			var dist := sqrt(dx * dx + dy * dy)
+			if dist < 8 or dist > s:
+				continue
+			var angle := atan2(dy, dx)
+			if abs(angle) > half_angle_rad:
+				continue
+			var alpha := (1.0 - dist / s) * (1.0 - abs(angle) / half_angle_rad)
+			alpha = alpha * 0.7
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
+	var tex := ImageTexture.create_from_image(img)
+	var slash_sprite := Sprite2D.new()
+	slash_sprite.texture = tex
+	slash_sprite.centered = true
+	slash_sprite.global_position = origin
+	slash_sprite.rotation = direction.angle()
+	slash_sprite.z_index = 20
+	owner_player.get_parent().add_child(slash_sprite)
+	var tween := slash_sprite.create_tween()
+	tween.tween_property(slash_sprite, "modulate:a", 0.0, 0.18).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(slash_sprite.queue_free)

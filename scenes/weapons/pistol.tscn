@@ -16,3 +16,7 @@ bullets_per_shot = 1
 automatic = false
 ammo_type = "pistol"
 bullet_scene = ExtResource("2_bullet_scene")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+centered = true
+offset = Vector2(0, 0)
