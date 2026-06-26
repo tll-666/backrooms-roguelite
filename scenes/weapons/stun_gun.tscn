@@ -15,6 +15,7 @@ bullet_speed = 600.0
 spread_angle = 1.0
 bullets_per_shot = 1
 automatic = false
+ammo_type = "stun"
 bullet_scene = ExtResource("2_bullet_scene")
 status_effect = "stun"
 effect_duration = 2.0

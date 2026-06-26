@@ -19,6 +19,8 @@ var stamina_regen: float = 30.0
 var dash_stamina_cost: float = 25.0
 var current_weapon: Weapon = null
 var weapon_inventory: Array[Weapon] = []
+## 弹药储备：{"pistol": 数量, "stun": 数量, ...} — 装填时从此消耗
+var ammo_reserves: Dictionary = {}
 var has_flashlight: bool = true
 var flashlight_on: bool = false
 var hotbar: Array = [null, null, null, null]
@@ -69,11 +71,12 @@ func _ready() -> void:
 	_give_starting_weapon()
 
 func _give_starting_weapon() -> void:
+	ammo_reserves["pistol"] = 30  # 先设储备，再 equip 才能自动装填
 	var pistol_scene = load("res://scenes/weapons/pistol.tscn")
 	if pistol_scene:
 		var pistol = pistol_scene.instantiate()
 		add_weapon(pistol)
-		hotbar[1] = pistol  # 存武器实例而非字符串，否则切换后无法重新装备
+		hotbar[1] = pistol
 	hotbar[0] = "flashlight"
 	_generate_flashlight_beam()
 
@@ -363,6 +366,27 @@ func remove_weapon(weapon: Weapon) -> void:
 func drop_weapon() -> void:
 	if current_weapon:
 		remove_weapon(current_weapon)
+
+
+## 弹药储备管理
+
+func get_ammo_reserve(ammo_type: String) -> int:
+	return ammo_reserves.get(ammo_type, 0)
+
+
+func consume_ammo(ammo_type: String, amount: int) -> bool:
+	var current: int = ammo_reserves.get(ammo_type, 0)
+	if current < amount:
+		return false
+	ammo_reserves[ammo_type] = current - amount
+	return true
+
+
+func add_ammo(ammo_type: String, amount: int) -> void:
+	ammo_reserves[ammo_type] = ammo_reserves.get(ammo_type, 0) + amount
+	# 如果当前武器使用该弹药类型，刷新 HUD
+	if current_weapon and current_weapon.ammo_type == ammo_type:
+		RunManager.ammo_changed.emit(current_weapon.current_ammo, current_weapon.max_ammo)
 
 func take_damage(amount: float) -> void:
 	if is_dead or is_dashing or is_invincible:

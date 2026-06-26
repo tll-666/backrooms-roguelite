@@ -23,6 +23,8 @@ enum WeaponKind { RANGED, MELEE }
 # --- 状态效果（由子弹/近战击中时施加） ---
 @export var status_effect: String = ""
 @export var effect_duration: float = 0.0
+# --- 弹药类型（用于从玩家储备中拉取弹药） ---
+@export var ammo_type: String = "pistol"
 
 var current_ammo: int
 var fire_timer: float = 0.0
@@ -31,7 +33,8 @@ var reload_timer: float = 0.0
 var owner_player: Player = null
 
 func _ready() -> void:
-	current_ammo = max_ammo + int(MetaProgression.get_upgrade_value("starting_ammo"))
+	# current_ammo 初始为 0，equip() 时从玩家储备自动装载
+	pass
 
 
 func _process(delta: float) -> void:
@@ -53,6 +56,9 @@ func equip(player: Player) -> void:
 	position = Vector2(20, 0)
 	visible = true
 	process_mode = Node.PROCESS_MODE_INHERIT
+	# 首次装备时从玩家储备自动装载弹药
+	if current_ammo <= 0 and owner_player.has_method("get_ammo_reserve"):
+		_reload_from_reserve()
 	RunManager.ammo_changed.emit(current_ammo, max_ammo)
 
 
@@ -138,11 +144,24 @@ func _spawn_bullet(origin: Vector2, direction: Vector2) -> void:
 func start_reload() -> void:
 	if is_reloading or current_ammo >= max_ammo:
 		return
+	# 检查玩家弹药储备
+	if owner_player and owner_player.has_method("get_ammo_reserve"):
+		if owner_player.get_ammo_reserve(ammo_type) <= 0:
+			return  # 无储备弹药，无法装填
 	is_reloading = true
 	reload_timer = reload_time - MetaProgression.get_upgrade_value("reload_speed")
 
 
 func _finish_reload() -> void:
 	is_reloading = false
-	current_ammo = max_ammo + int(MetaProgression.get_upgrade_value("starting_ammo"))
+	_reload_from_reserve()
 	RunManager.ammo_changed.emit(current_ammo, max_ammo)
+
+
+func _reload_from_reserve() -> void:
+	if owner_player and owner_player.has_method("get_ammo_reserve") and owner_player.has_method("consume_ammo"):
+		var reserve: int = owner_player.get_ammo_reserve(ammo_type)
+		var to_load: int = min(max_ammo, reserve)
+		if to_load > 0:
+			owner_player.consume_ammo(ammo_type, to_load)
+			current_ammo = to_load
